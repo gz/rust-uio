@@ -3,5 +3,5 @@ name = "uio"
 version = "0.1.0"
 authors = ["Gerd Zellweger <mail@gerdzellweger.com>"]
 
-[target.'cfg(unix)'.dependencies]
+[dependencies]
 mmap = "0.1.*"
