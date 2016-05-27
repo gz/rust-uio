@@ -1,11 +1,11 @@
 use std::io;
 use std::io::prelude::*;
 use std::os::unix::prelude::AsRawFd;
+use std::fs;
 use std::fs::{File};
 use std::num::{ParseIntError};
 use std::error::Error;
 use std::str::FromStr;
-use std::fmt;
 use libc::{MAP_SHARED};
 use mmap;
 
@@ -13,13 +13,14 @@ pub struct UioDevice {
     uio_num: usize,
     //path: &'static str,
     devfile: File,
-    mappings: Vec<[u8; 4096]>,
+    mappings: Vec<mmap::MemoryMap>,
 }
 
 #[derive(Debug)]
 pub enum UioError {
     Address,
     Io(io::Error),
+    Map(mmap::MapError),
     Parse,
 }
 
@@ -35,57 +36,50 @@ impl From<ParseIntError> for UioError {
     }
 }
 
-/*
 
-int size = 8192;
-struct cif *fi;
-pthread_mutexattr_t attr;
-
-cif_status_thread_stop = 0;
-
-fi = (struct cif *)calloc (1, sizeof (struct cif));
-if (!fi)
-    goto out;
-
-fi->size = size;
-
-fi->fd = open (name, O_RDWR);
-if (fi->fd == -1)
-    goto out_free;
-
-fi->io_plx = mmap (NULL, 128, PROT_READ | PROT_WRITE,
-           MAP_SHARED, fi->fd, 0 );
-if (fi->io_plx == MAP_FAILED)
-    goto out_close;
-
-fi->io = mmap (NULL, size, PROT_READ | PROT_WRITE,
-           MAP_SHARED, fi->fd, getpagesize() );
-if (fi->io == MAP_FAILED)
-    goto out_close;
-
- */
+impl From<mmap::MapError> for UioError {
+    fn from(e: mmap::MapError) -> Self {
+        UioError::Map(e)
+    }
+    }
 
 impl UioDevice {
 
     pub fn new(uio_num: usize) -> io::Result<UioDevice> {
         let path = format!("/dev/uio{}", uio_num);
-        let mut f = try!(File::open(path));
+        let f = try!(File::open(path));
+        Ok( UioDevice { uio_num: uio_num, devfile: f, mappings: Vec::new() } )
+    }
 
+    pub fn map_resources(&mut self) -> Result<(), UioError> {
+        let paths = try!(fs::read_dir(format!("/sys/class/uio/uio{}/device/", self.uio_num)));
+
+        let mut i = 0;
+        for path in paths {
+            let path_name = path.unwrap().path();
+            if path_name.starts_with("resource") {
+                let bar = self.map_resource(i).unwrap();
+                self.mappings.push(bar);
+                i += 1;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn map_resource(&self, bar_nr: usize) -> Result<mmap::MemoryMap, UioError> {
+        let filename = format!("/sys/class/uio/uio{}/device/resource{}", self.uio_num, bar_nr);
+        let f = try!(File::open(filename.to_string()));
+        let metadata = try!(fs::metadata(filename));
         let fd = f.as_raw_fd();
-        let io_plx = mmap::MemoryMap::new(128,
+
+        let res = try!(mmap::MemoryMap::new(metadata.len() as usize,
                     &[ mmap::MapOption::MapFd(fd),
                        mmap::MapOption::MapOffset(0),
                        mmap::MapOption::MapNonStandardFlags(MAP_SHARED),
                        mmap::MapOption::MapReadable,
-                       //mmap::MapOption::MapWritable
-                       ]);
-        match io_plx {
-            Err(e) => { panic!("Can not mmap device region: {}", e); },
-            Ok(m) => (),
-        }
-
-
-        Ok( UioDevice { uio_num: uio_num, devfile: f, mappings: Vec::new() } )
+                       mmap::MapOption::MapWritable ]));
+        Ok(res)
     }
 
     fn read_file(&self, path: String) -> Result<String, UioError> {
