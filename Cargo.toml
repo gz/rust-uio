@@ -5,3 +5,4 @@ authors = ["Gerd Zellweger <mail@gerdzellweger.com>"]
 
 [dependencies]
 mmap = "0.1.*"
+libc = "0.1.*"
