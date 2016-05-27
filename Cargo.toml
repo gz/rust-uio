@@ -2,6 +2,13 @@
 name = "uio"
 version = "0.1.0"
 authors = ["Gerd Zellweger <mail@gerdzellweger.com>"]
+description = "Helper library for writing linux user-space drivers with UIO."
+homepage = "https://github.com/gz/rust-uio"
+repository = "https://github.com/gz/rust-uio"
+documentation = "http://gz.github.io/rust-uio/uio/"
+readme = "README.md"
+keywords = ["driver", "pci", "linux", "generic", "hardware"]
+license = "MIT"
 
 [dependencies]
 mmap = "0.1.*"
