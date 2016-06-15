@@ -11,12 +11,6 @@ use mmap;
 
 const PAGESIZE: usize = 4096;
 
-pub struct UioDevice {
-    uio_num: usize,
-    //path: &'static str,
-    devfile: File,
-}
-
 #[derive(Debug)]
 pub enum UioError {
     Address,
@@ -43,14 +37,25 @@ impl From<mmap::MapError> for UioError {
     }
 }
 
+pub struct UioDevice {
+    uio_num: usize,
+    //path: &'static str,
+    devfile: File,
+}
+
 impl UioDevice {
 
+    /// Creates a new UIO device for Linux.
+    ///
+    /// # Arguments
+    ///  * uio_num - UIO index of device (i.e., 1 for /dev/uio1)
     pub fn new(uio_num: usize) -> io::Result<UioDevice> {
         let path = format!("/dev/uio{}", uio_num);
         let f = try!(File::open(path));
         Ok( UioDevice { uio_num: uio_num, devfile: f } )
     }
 
+    /// Return a vector of mappable resources (i.e., PCI bars) including their size.
     pub fn get_resource_info(&mut self) -> Result<Vec<(String, u64)>, UioError> {
         let paths = try!(fs::read_dir(format!("/sys/class/uio/uio{}/device/", self.uio_num)));
 
@@ -68,6 +73,10 @@ impl UioDevice {
         Ok(bars)
     }
 
+    /// Maps a given resource into the virtual address space of the process.
+    ///
+    /// # Arguments
+    ///   * bar_nr: The index to the given resource (i.e., 1 for /sys/class/uio/uioX/device/resource1)
     pub fn map_resource(&self, bar_nr: usize) -> Result<mmap::MemoryMap, UioError> {
         let filename = format!("/sys/class/uio/uio{}/device/resource{}", self.uio_num, bar_nr);
         let f = try!(OpenOptions::new().read(true).write(true).open(filename.to_string()));
@@ -101,31 +110,43 @@ impl UioDevice {
         }
     }
 
+    /// The amount of events.
     pub fn get_event_count(&self) -> Result<u32, UioError> {
         let filename = format!("/sys/class/uio/uio{}/event", self.uio_num);
         self.parse_from::<u32>(filename)
     }
 
+    /// The name of the UIO device.
     pub fn get_name(&self) -> Result<String, UioError> {
         let filename = format!("/sys/class/uio/uio{}/name", self.uio_num);
         self.read_file(filename)
     }
 
+    /// The version of the UIO driver.
     pub fn get_version(&self) -> Result<String, UioError> {
         let filename = format!("/sys/class/uio/uio{}/version", self.uio_num);
         self.read_file(filename)
     }
 
-    fn map_size(&self, mapping: usize) -> Result<usize, UioError> {
+    /// The size of a given mapping.
+    ///
+    /// # Arguments
+    ///  * mapping: The given index of the mapping (i.e., 1 for /sys/class/uio/uioX/maps/map1)
+    pub fn map_size(&self, mapping: usize) -> Result<usize, UioError> {
         let filename = format!("/sys/class/uio/uio{}/maps/map{}/size", self.uio_num, mapping);
         self.parse_from::<usize>(filename)
     }
 
-    fn map_addr(&self, mapping: usize) -> Result<usize, UioError> {
+    /// The address of a given mapping.
+    ///
+    /// # Arguments
+    ///  * mapping: The given index of the mapping (i.e., 1 for /sys/class/uio/uioX/maps/map1)
+    pub fn map_addr(&self, mapping: usize) -> Result<usize, UioError> {
         let filename = format!("/sys/class/uio/uio{}/maps/map{}/addr", self.uio_num, mapping);
         self.parse_from::<usize>(filename)
     }
 
+    /// Return a list of all possible memory mappings.
     pub fn get_map_info(&mut self) -> Result<Vec<String>, UioError> {
         let paths = try!(fs::read_dir(format!("/sys/class/uio/uio{}/maps/", self.uio_num)));
 
@@ -142,7 +163,11 @@ impl UioDevice {
         Ok(map)
     }
 
-    pub fn map_map(&self, mapping: usize) -> Result<mmap::MemoryMap, UioError> {
+    /// Map an available memory mapping.
+    ///
+    /// # Arguments
+    ///  * mapping: The given index of the mapping (i.e., 1 for /sys/class/uio/uioX/maps/map1)
+    pub fn map_mapping(&self, mapping: usize) -> Result<mmap::MemoryMap, UioError> {
         let offset = mapping * PAGESIZE;
         let fd = self.devfile.as_raw_fd();
         let map_size = self.map_size(mapping).unwrap(); // TODO
