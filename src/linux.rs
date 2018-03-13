@@ -4,8 +4,7 @@ use std::os::unix::prelude::AsRawFd;
 use std::fs;
 use std::fs::{File, OpenOptions};
 use std::num::{ParseIntError};
-use std::error::Error;
-use std::str::FromStr;
+use fs2::FileExt;
 use libc::{MAP_SHARED};
 use mmap;
 
@@ -51,8 +50,12 @@ impl UioDevice {
     ///  * uio_num - UIO index of device (i.e., 1 for /dev/uio1)
     pub fn new(uio_num: usize) -> io::Result<UioDevice> {
         let path = format!("/dev/uio{}", uio_num);
-        let f = try!(File::open(path));
-        Ok( UioDevice { uio_num: uio_num, devfile: f } )
+        let devfile = try!(OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(path));
+        devfile.lock_exclusive()?;
+        Ok( UioDevice { uio_num, devfile } )
     }
 
     /// Return a vector of mappable resources (i.e., PCI bars) including their size.
