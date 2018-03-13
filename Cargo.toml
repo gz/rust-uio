@@ -11,5 +11,6 @@ keywords = ["driver", "pci", "linux", "generic", "hardware"]
 license = "MIT"
 
 [dependencies]
+fs2 = "0.4.3"
 mmap = "0.1.*"
 libc = "0.1.*"
