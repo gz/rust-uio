@@ -4,6 +4,7 @@ use std::os::unix::prelude::AsRawFd;
 use std::fs;
 use std::fs::{File, OpenOptions};
 use std::num::{ParseIntError};
+use std::mem::transmute;
 use fs2::FileExt;
 use libc::{MAP_SHARED};
 use mmap;
@@ -187,6 +188,27 @@ impl UioDevice {
         Ok(res)
     }
 
+
+    /// Enable interrupt
+    pub fn irq_enable(&mut self) -> io::Result<()> {
+        let bytes: [u8; 4] = unsafe { transmute(1u32) };
+        self.devfile.write(&bytes)?;
+        Ok(())
+    }
+
+    /// Disable interrupt
+    pub fn irq_disable(&mut self) -> io::Result<()> {
+        let bytes: [u8; 4] = unsafe { transmute(0u32) };
+        self.devfile.write(&bytes)?;
+        Ok(())
+    }
+
+    /// Wait for interrupt
+    pub fn irq_wait(&mut self) -> io::Result<u32> {
+        let mut bytes: [u8; 4] = [0, 0, 0, 0];
+        self.devfile.read(&mut bytes)?;
+        Ok(unsafe { transmute(bytes) })
+    }
 }
 
 #[cfg(test)]
