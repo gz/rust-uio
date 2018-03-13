@@ -103,20 +103,14 @@ impl UioDevice {
         Ok(buffer.trim().to_string())
     }
 
-    fn parse_from<T>(&self, path: String) -> Result<T, UioError>
-       where T: FromStr {
-        let buffer = try!(self.read_file(path));
-
-        match buffer.parse::<T>() {
-            Err(_) => { Err(UioError::Parse) },
-            Ok(addr) => Ok(addr)
-        }
-    }
-
     /// The amount of events.
     pub fn get_event_count(&self) -> Result<u32, UioError> {
         let filename = format!("/sys/class/uio/uio{}/event", self.uio_num);
-        self.parse_from::<u32>(filename)
+        let buffer = self.read_file(filename)?;
+        match u32::from_str_radix(&buffer, 10) {
+            Ok(v) => Ok(v),
+            Err(e) => Err(UioError::from(e))
+        }
     }
 
     /// The name of the UIO device.
@@ -136,8 +130,13 @@ impl UioDevice {
     /// # Arguments
     ///  * mapping: The given index of the mapping (i.e., 1 for /sys/class/uio/uioX/maps/map1)
     pub fn map_size(&self, mapping: usize) -> Result<usize, UioError> {
-        let filename = format!("/sys/class/uio/uio{}/maps/map{}/size", self.uio_num, mapping);
-        self.parse_from::<usize>(filename)
+        let filename = format!("/sys/class/uio/uio{}/maps/map{}/size",
+                               self.uio_num, mapping);
+        let buffer = self.read_file(filename)?;
+        match usize::from_str_radix(&buffer[2..], 16) {
+            Ok(v) => Ok(v),
+            Err(e) => Err(UioError::from(e))
+        }
     }
 
     /// The address of a given mapping.
@@ -145,8 +144,13 @@ impl UioDevice {
     /// # Arguments
     ///  * mapping: The given index of the mapping (i.e., 1 for /sys/class/uio/uioX/maps/map1)
     pub fn map_addr(&self, mapping: usize) -> Result<usize, UioError> {
-        let filename = format!("/sys/class/uio/uio{}/maps/map{}/addr", self.uio_num, mapping);
-        self.parse_from::<usize>(filename)
+        let filename = format!("/sys/class/uio/uio{}/maps/map{}/addr",
+                               self.uio_num, mapping);
+        let buffer = self.read_file(filename)?;
+        match usize::from_str_radix(&buffer[2..], 16) {
+            Ok(v) => Ok(v),
+            Err(e) => Err(UioError::from(e))
+        }
     }
 
     /// Return a list of all possible memory mappings.
