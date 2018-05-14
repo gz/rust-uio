@@ -1,7 +1,7 @@
 Linux UIO library for Rust
 --------------------
 
-A thin abstraction library for writing user-space drivers in Linux by using the UIO facility (https://www.kernel.org/doc/htmldocs/uio-howto/).
+A thin abstraction library for writing user-space drivers in Linux by using the UIO facility (https://www.kernel.org/doc/html/latest/driver-api/uio-howto.html).
 
 In order to use this library, you'll need to make sure your device uses the Linux UIO driver module. For example, the following
 sample commands unload the ahci driver in Linux and use the `uio_pci_generic` module for the SSD disk for the PCI
@@ -37,7 +37,7 @@ For more information about UIO check the following links:
   * https://lwn.net/Articles/232575/
   * http://alvarom.com/2014/12/17/linux-user-space-drivers-with-interrupts/
   * http://lxr.free-electrons.com/source/drivers/uio/uio_cif.c
-  * https://www.kernel.org/doc/htmldocs/uio-howto/index.html
+  * https://www.kernel.org/doc/html/latest/driver-api/uio-howto.html
   * http://lxr.free-electrons.com/source/drivers/uio/uio_dmem_genirq.c
   * http://www.osadl.org/projects/downloads/UIO/user/
   * http://dpdk.org/browse/dpdk/tree/tools/dpdk_nic_bind.py
