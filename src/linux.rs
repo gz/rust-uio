@@ -1,13 +1,13 @@
-use std::io;
-use std::io::prelude::*;
-use std::os::unix::prelude::AsRawFd;
-use std::fs;
-use std::fs::{File, OpenOptions};
-use std::num::{ParseIntError};
-use std::mem::transmute;
+use fs2::FileExt;
 use libc;
 use nix::sys::mman::{MapFlags, ProtFlags};
-use fs2::FileExt;
+use std::fs;
+use std::fs::{File, OpenOptions};
+use std::io;
+use std::io::prelude::*;
+use std::mem::transmute;
+use std::num::ParseIntError;
+use std::os::unix::prelude::AsRawFd;
 
 const PAGESIZE: usize = 4096;
 
@@ -44,33 +44,35 @@ pub struct UioDevice {
 }
 
 impl UioDevice {
-
     /// Creates a new UIO device for Linux.
     ///
     /// # Arguments
     ///  * uio_num - UIO index of device (i.e., 1 for /dev/uio1)
     pub fn new(uio_num: usize) -> io::Result<UioDevice> {
         let path = format!("/dev/uio{}", uio_num);
-        let devfile = try!(OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(path));
+        let devfile = try!(OpenOptions::new().read(true).write(true).open(path));
         devfile.lock_exclusive()?;
-        Ok( UioDevice { uio_num, devfile } )
+        Ok(UioDevice { uio_num, devfile })
     }
 
     /// Return a vector of mappable resources (i.e., PCI bars) including their size.
     pub fn get_resource_info(&mut self) -> Result<Vec<(String, u64)>, UioError> {
-        let paths = try!(fs::read_dir(format!("/sys/class/uio/uio{}/device/", self.uio_num)));
+        let paths = try!(fs::read_dir(format!(
+            "/sys/class/uio/uio{}/device/",
+            self.uio_num
+        )));
 
         let mut bars = Vec::new();
         for p in paths {
             let path = try!(p);
-            let file_name = path.file_name().into_string().expect("Is valid UTF-8 string.");
+            let file_name = path
+                .file_name()
+                .into_string()
+                .expect("Is valid UTF-8 string.");
 
             if file_name.starts_with("resource") && file_name.len() > "resource".len() {
                 let metadata = try!(fs::metadata(path.path()));
-                bars.push( (file_name, metadata.len()) );
+                bars.push((file_name, metadata.len()));
             }
         }
 
@@ -82,8 +84,14 @@ impl UioDevice {
     /// # Arguments
     ///   * bar_nr: The index to the given resource (i.e., 1 for /sys/class/uio/uioX/device/resource1)
     pub fn map_resource(&self, bar_nr: usize) -> Result<*mut libc::c_void, UioError> {
-        let filename = format!("/sys/class/uio/uio{}/device/resource{}", self.uio_num, bar_nr);
-        let f = try!(OpenOptions::new().read(true).write(true).open(filename.to_string()));
+        let filename = format!(
+            "/sys/class/uio/uio{}/device/resource{}",
+            self.uio_num, bar_nr
+        );
+        let f = try!(OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(filename.to_string()));
         let metadata = try!(fs::metadata(filename.clone()));
         let fd = f.as_raw_fd();
 
@@ -116,7 +124,7 @@ impl UioDevice {
         let buffer = self.read_file(filename)?;
         match u32::from_str_radix(&buffer, 10) {
             Ok(v) => Ok(v),
-            Err(e) => Err(UioError::from(e))
+            Err(e) => Err(UioError::from(e)),
         }
     }
 
@@ -137,12 +145,14 @@ impl UioDevice {
     /// # Arguments
     ///  * mapping: The given index of the mapping (i.e., 1 for /sys/class/uio/uioX/maps/map1)
     pub fn map_size(&self, mapping: usize) -> Result<usize, UioError> {
-        let filename = format!("/sys/class/uio/uio{}/maps/map{}/size",
-                               self.uio_num, mapping);
+        let filename = format!(
+            "/sys/class/uio/uio{}/maps/map{}/size",
+            self.uio_num, mapping
+        );
         let buffer = self.read_file(filename)?;
         match usize::from_str_radix(&buffer[2..], 16) {
             Ok(v) => Ok(v),
-            Err(e) => Err(UioError::from(e))
+            Err(e) => Err(UioError::from(e)),
         }
     }
 
@@ -151,23 +161,31 @@ impl UioDevice {
     /// # Arguments
     ///  * mapping: The given index of the mapping (i.e., 1 for /sys/class/uio/uioX/maps/map1)
     pub fn map_addr(&self, mapping: usize) -> Result<usize, UioError> {
-        let filename = format!("/sys/class/uio/uio{}/maps/map{}/addr",
-                               self.uio_num, mapping);
+        let filename = format!(
+            "/sys/class/uio/uio{}/maps/map{}/addr",
+            self.uio_num, mapping
+        );
         let buffer = self.read_file(filename)?;
         match usize::from_str_radix(&buffer[2..], 16) {
             Ok(v) => Ok(v),
-            Err(e) => Err(UioError::from(e))
+            Err(e) => Err(UioError::from(e)),
         }
     }
 
     /// Return a list of all possible memory mappings.
     pub fn get_map_info(&mut self) -> Result<Vec<String>, UioError> {
-        let paths = try!(fs::read_dir(format!("/sys/class/uio/uio{}/maps/", self.uio_num)));
+        let paths = try!(fs::read_dir(format!(
+            "/sys/class/uio/uio{}/maps/",
+            self.uio_num
+        )));
 
         let mut map = Vec::new();
         for p in paths {
             let path = try!(p);
-            let file_name = path.file_name().into_string().expect("Is valid UTF-8 string.");
+            let file_name = path
+                .file_name()
+                .into_string()
+                .expect("Is valid UTF-8 string.");
 
             if file_name.starts_with("map") && file_name.len() > "map".len() {
                 map.push(file_name);
@@ -202,7 +220,6 @@ impl UioDevice {
         }
     }
 
-
     /// Enable interrupt
     pub fn irq_enable(&mut self) -> io::Result<()> {
         let bytes: [u8; 4] = unsafe { transmute(1u32) };
@@ -232,11 +249,12 @@ mod tests {
     fn open() {
         let res = ::linux::UioDevice::new(0);
         match res {
-            Err(e) => { panic!("Can not open device /dev/uio0: {}", e); },
+            Err(e) => {
+                panic!("Can not open device /dev/uio0: {}", e);
+            }
             Ok(_f) => (),
         }
     }
-
 
     #[test]
     fn print_info() {
@@ -254,10 +272,11 @@ mod tests {
         let res = ::linux::UioDevice::new(0).unwrap();
         let bars = res.map_resource(5);
         match bars {
-            Err(e) => { panic!("Can not map PCI stuff: {:?}", e); },
+            Err(e) => {
+                panic!("Can not map PCI stuff: {:?}", e);
+            }
             Ok(_f) => (),
         }
-
     }
 
     #[test]
@@ -265,9 +284,10 @@ mod tests {
         let mut res = ::linux::UioDevice::new(0).unwrap();
         let bars = res.get_resource_info();
         match bars {
-            Err(e) => { panic!("Can not map PCI stuff: {:?}", e); },
+            Err(e) => {
+                panic!("Can not map PCI stuff: {:?}", e);
+            }
             Ok(_f) => (),
         }
-
     }
 }
