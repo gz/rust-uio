@@ -5,9 +5,9 @@ use std::fs;
 use std::fs::{File, OpenOptions};
 use std::num::{ParseIntError};
 use std::mem::transmute;
+use libc;
+use nix::sys::mman::{MapFlags, ProtFlags};
 use fs2::FileExt;
-use libc::{MAP_SHARED};
-use mmap;
 
 const PAGESIZE: usize = 4096;
 
@@ -15,7 +15,7 @@ const PAGESIZE: usize = 4096;
 pub enum UioError {
     Address,
     Io(io::Error),
-    Map(mmap::MapError),
+    Map(nix::Error),
     Parse,
 }
 
@@ -31,8 +31,8 @@ impl From<ParseIntError> for UioError {
     }
 }
 
-impl From<mmap::MapError> for UioError {
-    fn from(e: mmap::MapError) -> Self {
+impl From<nix::Error> for UioError {
+    fn from(e: nix::Error) -> Self {
         UioError::Map(e)
     }
 }
@@ -81,20 +81,26 @@ impl UioDevice {
     ///
     /// # Arguments
     ///   * bar_nr: The index to the given resource (i.e., 1 for /sys/class/uio/uioX/device/resource1)
-    pub fn map_resource(&self, bar_nr: usize) -> Result<mmap::MemoryMap, UioError> {
+    pub fn map_resource(&self, bar_nr: usize) -> Result<*mut libc::c_void, UioError> {
         let filename = format!("/sys/class/uio/uio{}/device/resource{}", self.uio_num, bar_nr);
         let f = try!(OpenOptions::new().read(true).write(true).open(filename.to_string()));
         let metadata = try!(fs::metadata(filename.clone()));
         let fd = f.as_raw_fd();
 
-        let res = try!(mmap::MemoryMap::new(metadata.len() as usize,
-                    &[ mmap::MapOption::MapFd(fd),
-                       mmap::MapOption::MapOffset(0),
-                       mmap::MapOption::MapNonStandardFlags(MAP_SHARED),
-                       mmap::MapOption::MapReadable, mmap::MapOption::MapWritable
-                       ]));
-
-        Ok(res)
+        let res = unsafe {
+            nix::sys::mman::mmap(
+                0 as *mut libc::c_void,
+                metadata.len() as usize,
+                ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
+                MapFlags::MAP_SHARED,
+                fd,
+                0 as libc::off_t,
+            )
+        };
+        match res {
+            Ok(m) => Ok(m),
+            Err(e) => Err(UioError::from(e)),
+        }
     }
 
     fn read_file(&self, path: String) -> Result<String, UioError> {
@@ -175,17 +181,25 @@ impl UioDevice {
     ///
     /// # Arguments
     ///  * mapping: The given index of the mapping (i.e., 1 for /sys/class/uio/uioX/maps/map1)
-    pub fn map_mapping(&self, mapping: usize) -> Result<mmap::MemoryMap, UioError> {
+    pub fn map_mapping(&self, mapping: usize) -> Result<*mut libc::c_void, UioError> {
         let offset = mapping * PAGESIZE;
         let fd = self.devfile.as_raw_fd();
         let map_size = self.map_size(mapping).unwrap(); // TODO
 
-        let res = try!(mmap::MemoryMap::new(map_size,
-                       &[ mmap::MapOption::MapFd(fd),
-                          mmap::MapOption::MapOffset(offset),
-                          mmap::MapOption::MapNonStandardFlags(MAP_SHARED),
-                          mmap::MapOption::MapReadable, mmap::MapOption::MapWritable  ]));
-        Ok(res)
+        let res = unsafe {
+            nix::sys::mman::mmap(
+                0 as *mut libc::c_void,
+                map_size as usize,
+                ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
+                MapFlags::MAP_SHARED,
+                fd,
+                offset as libc::off_t,
+            )
+        };
+        match res {
+            Ok(m) => Ok(m),
+            Err(e) => Err(UioError::from(e)),
+        }
     }
 
 
@@ -219,7 +233,7 @@ mod tests {
         let res = ::linux::UioDevice::new(0);
         match res {
             Err(e) => { panic!("Can not open device /dev/uio0: {}", e); },
-            Ok(f) => (),
+            Ok(_f) => (),
         }
     }
 
@@ -237,11 +251,11 @@ mod tests {
 
     #[test]
     fn map() {
-        let mut res = ::linux::UioDevice::new(0).unwrap();
+        let res = ::linux::UioDevice::new(0).unwrap();
         let bars = res.map_resource(5);
         match bars {
             Err(e) => { panic!("Can not map PCI stuff: {:?}", e); },
-            Ok(f) => (),
+            Ok(_f) => (),
         }
 
     }
@@ -252,7 +266,7 @@ mod tests {
         let bars = res.get_resource_info();
         match bars {
             Err(e) => { panic!("Can not map PCI stuff: {:?}", e); },
-            Ok(f) => (),
+            Ok(_f) => (),
         }
 
     }
