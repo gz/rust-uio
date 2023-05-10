@@ -6,7 +6,7 @@ use std::fs::{File, OpenOptions};
 use std::io;
 use std::io::prelude::*;
 use std::mem::transmute;
-use std::num::ParseIntError;
+use std::num::{NonZeroUsize, ParseIntError};
 use std::os::unix::prelude::AsRawFd;
 
 const PAGESIZE: usize = 4096;
@@ -14,6 +14,7 @@ const PAGESIZE: usize = 4096;
 #[derive(Debug)]
 pub enum UioError {
     Address,
+    Size,
     Io(io::Error),
     Map(nix::Error),
     Parse,
@@ -93,12 +94,13 @@ impl UioDevice {
             .write(true)
             .open(filename.to_string()));
         let metadata = try!(fs::metadata(filename.clone()));
+        let length = NonZeroUsize::new(metadata.len() as usize).ok_or(UioError::Size)?;
         let fd = f.as_raw_fd();
 
         let res = unsafe {
             nix::sys::mman::mmap(
-                0 as *mut libc::c_void,
-                metadata.len() as usize,
+                None,
+                length,
                 ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
                 MapFlags::MAP_SHARED,
                 fd,
@@ -202,12 +204,13 @@ impl UioDevice {
     pub fn map_mapping(&self, mapping: usize) -> Result<*mut libc::c_void, UioError> {
         let offset = mapping * PAGESIZE;
         let fd = self.devfile.as_raw_fd();
-        let map_size = self.map_size(mapping).unwrap(); // TODO
+        let map_size = self.map_size(mapping)?;
+        let map_size = NonZeroUsize::new(map_size).ok_or(UioError::Size)?;
 
         let res = unsafe {
             nix::sys::mman::mmap(
-                0 as *mut libc::c_void,
-                map_size as usize,
+                None,
+                map_size,
                 ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
                 MapFlags::MAP_SHARED,
                 fd,
