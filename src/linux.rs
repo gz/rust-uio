@@ -6,7 +6,7 @@ use std::fs::{File, OpenOptions};
 use std::io;
 use std::io::prelude::*;
 use std::mem::transmute;
-use std::num::ParseIntError;
+use std::num::{NonZeroUsize, ParseIntError};
 use std::os::unix::prelude::AsRawFd;
 
 const PAGESIZE: usize = 4096;
@@ -14,6 +14,7 @@ const PAGESIZE: usize = 4096;
 #[derive(Debug)]
 pub enum UioError {
     Address,
+    Size,
     Io(io::Error),
     Map(nix::Error),
     Parse,
@@ -50,28 +51,25 @@ impl UioDevice {
     ///  * uio_num - UIO index of device (i.e., 1 for /dev/uio1)
     pub fn new(uio_num: usize) -> io::Result<UioDevice> {
         let path = format!("/dev/uio{}", uio_num);
-        let devfile = try!(OpenOptions::new().read(true).write(true).open(path));
+        let devfile = OpenOptions::new().read(true).write(true).open(path)?;
         devfile.lock_exclusive()?;
         Ok(UioDevice { uio_num, devfile })
     }
 
     /// Return a vector of mappable resources (i.e., PCI bars) including their size.
     pub fn get_resource_info(&mut self) -> Result<Vec<(String, u64)>, UioError> {
-        let paths = try!(fs::read_dir(format!(
-            "/sys/class/uio/uio{}/device/",
-            self.uio_num
-        )));
+        let paths = fs::read_dir(format!("/sys/class/uio/uio{}/device/", self.uio_num))?;
 
         let mut bars = Vec::new();
         for p in paths {
-            let path = try!(p);
+            let path = p?;
             let file_name = path
                 .file_name()
                 .into_string()
                 .expect("Is valid UTF-8 string.");
 
             if file_name.starts_with("resource") && file_name.len() > "resource".len() {
-                let metadata = try!(fs::metadata(path.path()));
+                let metadata = fs::metadata(path.path())?;
                 bars.push((file_name, metadata.len()));
             }
         }
@@ -88,17 +86,18 @@ impl UioDevice {
             "/sys/class/uio/uio{}/device/resource{}",
             self.uio_num, bar_nr
         );
-        let f = try!(OpenOptions::new()
+        let f = OpenOptions::new()
             .read(true)
             .write(true)
-            .open(filename.to_string()));
-        let metadata = try!(fs::metadata(filename.clone()));
+            .open(filename.to_string())?;
+        let metadata = fs::metadata(filename.clone())?;
+        let length = NonZeroUsize::new(metadata.len() as usize).ok_or(UioError::Size)?;
         let fd = f.as_raw_fd();
 
         let res = unsafe {
             nix::sys::mman::mmap(
-                0 as *mut libc::c_void,
-                metadata.len() as usize,
+                None,
+                length,
                 ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
                 MapFlags::MAP_SHARED,
                 fd,
@@ -112,9 +111,9 @@ impl UioDevice {
     }
 
     fn read_file(&self, path: String) -> Result<String, UioError> {
-        let mut file = try!(File::open(path));
+        let mut file = File::open(path)?;
         let mut buffer = String::new();
-        try!(file.read_to_string(&mut buffer));
+        file.read_to_string(&mut buffer)?;
         Ok(buffer.trim().to_string())
     }
 
@@ -174,14 +173,11 @@ impl UioDevice {
 
     /// Return a list of all possible memory mappings.
     pub fn get_map_info(&mut self) -> Result<Vec<String>, UioError> {
-        let paths = try!(fs::read_dir(format!(
-            "/sys/class/uio/uio{}/maps/",
-            self.uio_num
-        )));
+        let paths = fs::read_dir(format!("/sys/class/uio/uio{}/maps/", self.uio_num))?;
 
         let mut map = Vec::new();
         for p in paths {
-            let path = try!(p);
+            let path = p?;
             let file_name = path
                 .file_name()
                 .into_string()
@@ -202,12 +198,13 @@ impl UioDevice {
     pub fn map_mapping(&self, mapping: usize) -> Result<*mut libc::c_void, UioError> {
         let offset = mapping * PAGESIZE;
         let fd = self.devfile.as_raw_fd();
-        let map_size = self.map_size(mapping).unwrap(); // TODO
+        let map_size = self.map_size(mapping)?;
+        let map_size = NonZeroUsize::new(map_size).ok_or(UioError::Size)?;
 
         let res = unsafe {
             nix::sys::mman::mmap(
-                0 as *mut libc::c_void,
-                map_size as usize,
+                None,
+                map_size,
                 ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
                 MapFlags::MAP_SHARED,
                 fd,
