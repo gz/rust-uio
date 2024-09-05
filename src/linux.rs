@@ -53,14 +53,36 @@ impl Drop for UioDevice {
 }
 
 impl UioDevice {
+    #[deprecated(since = "0.3.0", note = "Use blocking_new or try_new instead")]
+    pub fn new(uio_num: usize) -> io::Result<UioDevice> {
+        Self::blocking_new(uio_num)
+    }
+
     /// Creates a new UIO device for Linux.
+    ///
+    /// This variant will block until it can obtain an exclusive lock on the
+    /// uio device.
     ///
     /// # Arguments
     ///  * uio_num - UIO index of device (i.e., 1 for /dev/uio1)
-    pub fn new(uio_num: usize) -> io::Result<UioDevice> {
+    pub fn blocking_new(uio_num: usize) -> io::Result<UioDevice> {
         let path = format!("/dev/uio{}", uio_num);
         let devfile = OpenOptions::new().read(true).write(true).open(path)?;
         devfile.lock_exclusive()?;
+        Ok(UioDevice { uio_num, devfile })
+    }
+
+    /// Creates a new UIO device for Linux.
+    ///
+    /// This variant will return Err(`EWOULDBLOCK`) instead of blocking, if it
+    /// can't obtain an exclusive lock on the uio device.
+    ///
+    /// # Arguments
+    ///  * uio_num - UIO index of device (i.e., 1 for /dev/uio1)
+    pub fn try_new(uio_num: usize) -> io::Result<UioDevice> {
+        let path = format!("/dev/uio{}", uio_num);
+        let devfile = OpenOptions::new().read(true).write(true).open(path)?;
+        devfile.try_lock_exclusive()?;
         Ok(UioDevice { uio_num, devfile })
     }
 
@@ -252,7 +274,7 @@ mod tests {
 
     #[test]
     fn open() {
-        let res = ::linux::UioDevice::new(0);
+        let res = ::linux::UioDevice::try_new(0);
         match res {
             Err(e) => {
                 panic!("Can not open device /dev/uio0: {}", e);
@@ -263,7 +285,7 @@ mod tests {
 
     #[test]
     fn print_info() {
-        let res = ::linux::UioDevice::new(0).unwrap();
+        let res = ::linux::UioDevice::try_new(0).unwrap();
         let name = res.get_name().expect("Can't get name");
         let version = res.get_version().expect("Can't get version");
         let event_count = res.get_event_count().expect("Can't get event count");
@@ -274,7 +296,7 @@ mod tests {
 
     #[test]
     fn map() {
-        let res = ::linux::UioDevice::new(0).unwrap();
+        let res = ::linux::UioDevice::try_new(0).unwrap();
         let bars = res.map_resource(5);
         match bars {
             Err(e) => {
@@ -286,7 +308,7 @@ mod tests {
 
     #[test]
     fn bar_info() {
-        let mut res = ::linux::UioDevice::new(0).unwrap();
+        let mut res = ::linux::UioDevice::try_new(0).unwrap();
         let bars = res.get_resource_info();
         match bars {
             Err(e) => {
