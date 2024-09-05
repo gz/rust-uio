@@ -211,7 +211,20 @@ impl UioDevice {
         }
     }
 
+    /// The name of a given mapping.
+    ///
+    /// # Arguments
+    ///  * mapping: The given index of the mapping (i.e., 1 for /sys/class/uio/uioX/maps/map1)
+    pub fn map_name(&self, mapping: usize) -> Result<String, UioError> {
+        let filename = format!(
+            "/sys/class/uio/uio{}/maps/map{}/name",
+            self.uio_num, mapping
+        );
+        self.read_file(filename)
+    }
+
     /// Return a list of all possible memory mappings.
+    #[deprecated(since = "0.3.0", note = "Use get_mapping_info() instead")]
     pub fn get_map_info(&mut self) -> Result<Vec<String>, UioError> {
         let paths = fs::read_dir(format!("/sys/class/uio/uio{}/maps/", self.uio_num))?;
 
@@ -226,6 +239,44 @@ impl UioDevice {
             if file_name.starts_with("map") && file_name.len() > "map".len() {
                 map.push(file_name);
             }
+        }
+
+        Ok(map)
+    }
+
+    /// Complete information about all Mappings available
+    ///
+    /// This reads all files under `/sys/class/uio/uioN/maps/*`, where N ==
+    /// `self.uio_num`. If any of the files are missing or otherwise unreadable,
+    /// that Mapping will be skipped.
+    pub fn get_mapping_info(&mut self) -> Result<Vec<MappingInfo>, UioError> {
+        let paths = fs::read_dir(format!("/sys/class/uio/uio{}/maps/", self.uio_num))?;
+
+        let mut map = Vec::new();
+        'each_map_dir: for p in paths {
+            let entry = p?;
+            let dir_name = entry.file_name();
+            let Some(dir_name) = dir_name.to_str() else {
+                break 'each_map_dir;
+            };
+            if !(entry.file_type()?.is_dir() && dir_name.starts_with("map")) {
+                break 'each_map_dir;
+            }
+
+            let Ok(index) = dir_name.trim_start_matches("map").parse() else {
+                break 'each_map_dir;
+            };
+
+            let addr = self.map_addr(index)?;
+            let name = self.map_name(index)?;
+            let len = self.map_size(index)?;
+
+            map.push(MappingInfo {
+                index,
+                addr,
+                len,
+                name,
+            });
         }
 
         Ok(map)
@@ -277,6 +328,26 @@ impl UioDevice {
         self.devfile.read(&mut bytes)?;
         Ok(unsafe { transmute(bytes) })
     }
+}
+
+/// All information about one of a UioDevice's Mapping
+/// This is a dump of everything contained in `/sys/class/uio/uio{n}/maps/map*/*`
+pub struct MappingInfo {
+    /// Index of the Mapping
+    ///
+    /// E.g. the `0` in `.../maps/map0`
+    pub index: usize,
+
+    /// Physical address of the Mapping
+    pub addr: usize,
+
+    /// Length in bytes of the Mapping region
+    pub len: usize,
+
+    /// Name supplied by the UIO device
+    ///
+    /// Typically this would be set in a device-tree entry
+    pub name: String,
 }
 
 #[cfg(test)]
