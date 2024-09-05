@@ -44,6 +44,14 @@ pub struct UioDevice {
     devfile: File,
 }
 
+impl Drop for UioDevice {
+    fn drop(&mut self) {
+        self.devfile
+            .unlock()
+            .expect("Failed to release lock on /dev/uio* device");
+    }
+}
+
 impl UioDevice {
     /// Creates a new UIO device for Linux.
     ///
