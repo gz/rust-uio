@@ -157,6 +157,16 @@ impl UioDevice {
         }
     }
 
+    /// UIO device number (e.g. 0 for /dev/uio0)
+    pub fn get_num(&self) -> usize {
+        self.uio_num
+    }
+
+    /// Path to UIO device file (e.g. "/dev/uio0")
+    pub fn get_dev_path(&self) -> impl AsRef<std::path::Path> {
+        format!("/dev/uio{}", self.uio_num)
+    }
+
     /// The name of the UIO device.
     pub fn get_name(&self) -> Result<String, UioError> {
         let filename = format!("/sys/class/uio/uio{}/name", self.uio_num);
