@@ -1,6 +1,6 @@
 [package]
 name = "uio"
-version = "0.2.1"
+version = "0.3.0"
 authors = ["Gerd Zellweger <mail@gerdzellweger.com>"]
 description = "Helper library for writing linux user-space drivers with UIO."
 repository = "https://github.com/gz/rust-uio"
