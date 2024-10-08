@@ -7,6 +7,7 @@ use std::io;
 use std::io::prelude::*;
 use std::mem::transmute;
 use std::num::{NonZeroUsize, ParseIntError};
+use std::os::fd;
 use std::os::unix::prelude::AsRawFd;
 
 const PAGESIZE: usize = 4096;
@@ -288,7 +289,7 @@ impl UioDevice {
     ///  * mapping: The given index of the mapping (i.e., 1 for /sys/class/uio/uioX/maps/map1)
     pub fn map_mapping(&self, mapping: usize) -> Result<*mut libc::c_void, UioError> {
         let offset = mapping * PAGESIZE;
-        let fd = self.devfile.as_raw_fd();
+        let fd = self.as_raw_fd();
         let map_size = self.map_size(mapping)?;
         let map_size = NonZeroUsize::new(map_size).ok_or(UioError::Size)?;
 
@@ -327,6 +328,12 @@ impl UioDevice {
         let mut bytes: [u8; 4] = [0, 0, 0, 0];
         self.devfile.read(&mut bytes)?;
         Ok(unsafe { transmute(bytes) })
+    }
+}
+
+impl fd::AsRawFd for UioDevice {
+    fn as_raw_fd(&self) -> fd::RawFd {
+        self.devfile.as_raw_fd()
     }
 }
 
