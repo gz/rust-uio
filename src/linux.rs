@@ -5,7 +5,6 @@ use std::fs;
 use std::fs::{File, OpenOptions};
 use std::io;
 use std::io::prelude::*;
-use std::mem::transmute;
 use std::num::{NonZeroUsize, ParseIntError};
 use std::os::fd;
 use std::os::unix::prelude::AsRawFd;
@@ -311,14 +310,14 @@ impl UioDevice {
 
     /// Enable interrupt
     pub fn irq_enable(&mut self) -> io::Result<()> {
-        let bytes: [u8; 4] = unsafe { transmute(1u32) };
+        let bytes = 1u32.to_ne_bytes();
         self.devfile.write(&bytes)?;
         Ok(())
     }
 
     /// Disable interrupt
     pub fn irq_disable(&mut self) -> io::Result<()> {
-        let bytes: [u8; 4] = unsafe { transmute(0u32) };
+        let bytes = 0u32.to_ne_bytes();
         self.devfile.write(&bytes)?;
         Ok(())
     }
@@ -327,7 +326,7 @@ impl UioDevice {
     pub fn irq_wait(&mut self) -> io::Result<u32> {
         let mut bytes: [u8; 4] = [0, 0, 0, 0];
         self.devfile.read(&mut bytes)?;
-        Ok(unsafe { transmute(bytes) })
+        Ok(u32::from_ne_bytes(bytes))
     }
 }
 
