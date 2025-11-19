@@ -38,6 +38,20 @@ impl From<nix::Error> for UioError {
     }
 }
 
+impl std::fmt::Display for UioError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            UioError::Address => write!(f, "Invalid address"),
+            UioError::Size => write!(f, "Invalid size"),
+            UioError::Io(e) => write!(f, "IO error: {}", e),
+            UioError::Map(e) => write!(f, "Map error: {}", e),
+            UioError::Parse => write!(f, "Parse error"),
+        }
+    }
+}
+
+impl std::error::Error for UioError {}
+
 pub struct UioDevice {
     uio_num: usize,
     //path: &'static str,
