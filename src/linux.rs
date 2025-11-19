@@ -361,7 +361,7 @@ mod tests {
 
     #[test]
     fn open() {
-        let res = ::linux::UioDevice::try_new(0);
+        let res = crate::linux::UioDevice::try_new(0);
         match res {
             Err(e) => {
                 panic!("Can not open device /dev/uio0: {}", e);
@@ -372,7 +372,7 @@ mod tests {
 
     #[test]
     fn print_info() {
-        let res = ::linux::UioDevice::try_new(0).unwrap();
+        let res = crate::linux::UioDevice::try_new(0).unwrap();
         let name = res.get_name().expect("Can't get name");
         let version = res.get_version().expect("Can't get version");
         let event_count = res.get_event_count().expect("Can't get event count");
@@ -383,7 +383,7 @@ mod tests {
 
     #[test]
     fn map() {
-        let res = ::linux::UioDevice::try_new(0).unwrap();
+        let res = crate::linux::UioDevice::try_new(0).unwrap();
         let bars = res.map_resource(5);
         match bars {
             Err(e) => {
@@ -395,7 +395,7 @@ mod tests {
 
     #[test]
     fn bar_info() {
-        let mut res = ::linux::UioDevice::try_new(0).unwrap();
+        let mut res = crate::linux::UioDevice::try_new(0).unwrap();
         let bars = res.get_resource_info();
         match bars {
             Err(e) => {
