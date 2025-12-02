@@ -356,6 +356,7 @@ impl fd::AsFd for UioDevice {
 
 /// All information about one of a UioDevice's Mapping
 /// This is a dump of everything contained in `/sys/class/uio/uio{n}/maps/map*/*`
+#[derive(Debug, Clone)]
 pub struct MappingInfo {
     /// Index of the Mapping
     ///
