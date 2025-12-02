@@ -1,5 +1,4 @@
-Linux UIO library for Rust
---------------------
+# Linux UIO library for Rust
 
 A thin abstraction library for writing user-space drivers in Linux by using the UIO facility (https://www.kernel.org/doc/html/latest/driver-api/uio-howto.html).
 
@@ -7,7 +6,7 @@ In order to use this library, you'll need to make sure your device uses the Linu
 sample commands unload the ahci driver in Linux and use the `uio_pci_generic` module for the SSD disk for the PCI
 device with vendor `0x8086` and device id `0x1d02`. (Note: Dangerous, don't do this if you don't know what you're doing).
 
-```
+```sh
 $ modprobe -r ahci
 $ sudo modprobe uio
 $ sudo modprobe uio_pci_generic
@@ -29,15 +28,14 @@ pub fn main() {
 }
 ```
 
-
-Resources
---------------------
+## Resources
 
 For more information about UIO check the following links:
-  * https://lwn.net/Articles/232575/
-  * http://alvarom.com/2014/12/17/linux-user-space-drivers-with-interrupts/
-  * http://lxr.free-electrons.com/source/drivers/uio/uio_cif.c
-  * https://www.kernel.org/doc/html/latest/driver-api/uio-howto.html
-  * http://lxr.free-electrons.com/source/drivers/uio/uio_dmem_genirq.c
-  * http://www.osadl.org/projects/downloads/UIO/user/
-  * http://dpdk.org/browse/dpdk/tree/tools/dpdk_nic_bind.py
+
+- https://lwn.net/Articles/232575/
+- http://alvarom.com/2014/12/17/linux-user-space-drivers-with-interrupts/
+- http://lxr.free-electrons.com/source/drivers/uio/uio_cif.c
+- https://www.kernel.org/doc/html/latest/driver-api/uio-howto.html
+- http://lxr.free-electrons.com/source/drivers/uio/uio_dmem_genirq.c
+- http://www.osadl.org/projects/downloads/UIO/user/
+- http://dpdk.org/browse/dpdk/tree/tools/dpdk_nic_bind.py
