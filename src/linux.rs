@@ -7,7 +7,6 @@ use std::io;
 use std::io::prelude::*;
 use std::num::{NonZeroUsize, ParseIntError};
 use std::os::fd;
-use std::os::unix::prelude::AsRawFd;
 
 const PAGESIZE: usize = 4096;
 
@@ -37,6 +36,20 @@ impl From<nix::Error> for UioError {
         UioError::Map(e)
     }
 }
+
+impl std::fmt::Display for UioError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            UioError::Address => write!(f, "Invalid address"),
+            UioError::Size => write!(f, "Invalid size"),
+            UioError::Io(e) => write!(f, "IO error: {}", e),
+            UioError::Map(e) => write!(f, "Map error: {}", e),
+            UioError::Parse => write!(f, "Parse error"),
+        }
+    }
+}
+
+impl std::error::Error for UioError {}
 
 #[derive(Debug)]
 pub struct UioDevice {
@@ -123,7 +136,6 @@ impl UioDevice {
             .open(filename.to_string())?;
         let metadata = fs::metadata(filename.clone())?;
         let length = NonZeroUsize::new(metadata.len() as usize).ok_or(UioError::Size)?;
-        let fd = f.as_raw_fd();
 
         let res = unsafe {
             nix::sys::mman::mmap(
@@ -131,12 +143,12 @@ impl UioDevice {
                 length,
                 ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
                 MapFlags::MAP_SHARED,
-                fd,
+                f,
                 0 as libc::off_t,
             )
         };
         match res {
-            Ok(m) => Ok(m),
+            Ok(m) => Ok(m.as_ptr()),
             Err(e) => Err(UioError::from(e)),
         }
     }
@@ -289,7 +301,6 @@ impl UioDevice {
     ///  * mapping: The given index of the mapping (i.e., 1 for /sys/class/uio/uioX/maps/map1)
     pub fn map_mapping(&self, mapping: usize) -> Result<*mut libc::c_void, UioError> {
         let offset = mapping * PAGESIZE;
-        let fd = self.as_raw_fd();
         let map_size = self.map_size(mapping)?;
         let map_size = NonZeroUsize::new(map_size).ok_or(UioError::Size)?;
 
@@ -299,12 +310,12 @@ impl UioDevice {
                 map_size,
                 ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
                 MapFlags::MAP_SHARED,
-                fd,
+                self,
                 offset as libc::off_t,
             )
         };
         match res {
-            Ok(m) => Ok(m),
+            Ok(m) => Ok(m.as_ptr()),
             Err(e) => Err(UioError::from(e)),
         }
     }
@@ -337,6 +348,12 @@ impl fd::AsRawFd for UioDevice {
     }
 }
 
+impl fd::AsFd for UioDevice {
+    fn as_fd(&self) -> fd::BorrowedFd<'_> {
+        self.devfile.as_fd()
+    }
+}
+
 /// All information about one of a UioDevice's Mapping
 /// This is a dump of everything contained in `/sys/class/uio/uio{n}/maps/map*/*`
 pub struct MappingInfo {
@@ -362,7 +379,7 @@ mod tests {
 
     #[test]
     fn open() {
-        let res = ::linux::UioDevice::try_new(0);
+        let res = crate::linux::UioDevice::try_new(0);
         match res {
             Err(e) => {
                 panic!("Can not open device /dev/uio0: {}", e);
@@ -373,7 +390,7 @@ mod tests {
 
     #[test]
     fn print_info() {
-        let res = ::linux::UioDevice::try_new(0).unwrap();
+        let res = crate::linux::UioDevice::try_new(0).unwrap();
         let name = res.get_name().expect("Can't get name");
         let version = res.get_version().expect("Can't get version");
         let event_count = res.get_event_count().expect("Can't get event count");
@@ -384,7 +401,7 @@ mod tests {
 
     #[test]
     fn map() {
-        let res = ::linux::UioDevice::try_new(0).unwrap();
+        let res = crate::linux::UioDevice::try_new(0).unwrap();
         let bars = res.map_resource(5);
         match bars {
             Err(e) => {
@@ -396,7 +413,7 @@ mod tests {
 
     #[test]
     fn bar_info() {
-        let mut res = ::linux::UioDevice::try_new(0).unwrap();
+        let mut res = crate::linux::UioDevice::try_new(0).unwrap();
         let bars = res.get_resource_info();
         match bars {
             Err(e) => {
