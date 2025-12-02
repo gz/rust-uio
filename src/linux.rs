@@ -51,6 +51,7 @@ impl std::fmt::Display for UioError {
 
 impl std::error::Error for UioError {}
 
+#[derive(Debug)]
 pub struct UioDevice {
     uio_num: usize,
     //path: &'static str,
