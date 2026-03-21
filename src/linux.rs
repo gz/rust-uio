@@ -5,7 +5,7 @@ use std::fs::{File, OpenOptions};
 use std::io;
 use std::io::prelude::*;
 use std::num::{NonZeroUsize, ParseIntError};
-use std::os::fd;
+use std::os::fd::{self, AsRawFd};
 
 const PAGESIZE: usize = 4096;
 
@@ -339,6 +339,17 @@ impl UioDevice {
         let mut bytes = [0; 4];
         self.devfile.read_exact(&mut bytes)?;
         Ok(u32::from_ne_bytes(bytes))
+    }
+
+    /// Set non-blocking mode on the raw file descriptor.
+    ///
+    /// Required when wrapping the UIO device into an AsyncFd.
+    pub fn set_nonblock(&self) {
+        let raw_fd = self.as_raw_fd();
+        unsafe {
+            let flags = libc::fcntl(raw_fd, libc::F_GETFL);
+            libc::fcntl(raw_fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
+        }
     }
 }
 
