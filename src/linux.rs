@@ -1,5 +1,4 @@
 use fs2::FileExt;
-use libc;
 use nix::sys::mman::{MapFlags, ProtFlags};
 use std::fs;
 use std::fs::{File, OpenOptions};
@@ -42,8 +41,8 @@ impl std::fmt::Display for UioError {
         match self {
             UioError::Address => write!(f, "Invalid address"),
             UioError::Size => write!(f, "Invalid size"),
-            UioError::Io(e) => write!(f, "IO error: {}", e),
-            UioError::Map(e) => write!(f, "Map error: {}", e),
+            UioError::Io(e) => write!(f, "IO error: {e}"),
+            UioError::Map(e) => write!(f, "Map error: {e}"),
             UioError::Parse => write!(f, "Parse error"),
         }
     }
@@ -51,24 +50,28 @@ impl std::fmt::Display for UioError {
 
 impl std::error::Error for UioError {}
 
+type Result<T> = std::result::Result<T, UioError>;
+
 #[derive(Debug)]
 pub struct UioDevice {
     uio_num: usize,
-    //path: &'static str,
     devfile: File,
 }
 
 impl Drop for UioDevice {
     fn drop(&mut self) {
-        self.devfile
-            .unlock()
-            .expect("Failed to release lock on /dev/uio* device");
+        self.devfile.unlock().unwrap_or_else(|e| {
+            panic!(
+                "Failed to release lock on /dev/uio{} device: {e}",
+                self.get_num()
+            )
+        });
     }
 }
 
 impl UioDevice {
     #[deprecated(since = "0.3.0", note = "Use blocking_new or try_new instead")]
-    pub fn new(uio_num: usize) -> io::Result<UioDevice> {
+    pub fn new(uio_num: usize) -> io::Result<Self> {
         Self::blocking_new(uio_num)
     }
 
@@ -79,11 +82,11 @@ impl UioDevice {
     ///
     /// # Arguments
     ///  * uio_num - UIO index of device (i.e., 1 for /dev/uio1)
-    pub fn blocking_new(uio_num: usize) -> io::Result<UioDevice> {
+    pub fn blocking_new(uio_num: usize) -> io::Result<Self> {
         let path = format!("/dev/uio{}", uio_num);
         let devfile = OpenOptions::new().read(true).write(true).open(path)?;
         devfile.lock_exclusive()?;
-        Ok(UioDevice { uio_num, devfile })
+        Ok(Self { uio_num, devfile })
     }
 
     /// Creates a new UIO device for Linux.
@@ -93,15 +96,15 @@ impl UioDevice {
     ///
     /// # Arguments
     ///  * uio_num - UIO index of device (i.e., 1 for /dev/uio1)
-    pub fn try_new(uio_num: usize) -> io::Result<UioDevice> {
+    pub fn try_new(uio_num: usize) -> io::Result<Self> {
         let path = format!("/dev/uio{}", uio_num);
         let devfile = OpenOptions::new().read(true).write(true).open(path)?;
         devfile.try_lock_exclusive()?;
-        Ok(UioDevice { uio_num, devfile })
+        Ok(Self { uio_num, devfile })
     }
 
     /// Return a vector of mappable resources (i.e., PCI bars) including their size.
-    pub fn get_resource_info(&mut self) -> Result<Vec<(String, u64)>, UioError> {
+    pub fn get_resource_info(&mut self) -> Result<Vec<(String, u64)>> {
         let paths = fs::read_dir(format!("/sys/class/uio/uio{}/device/", self.uio_num))?;
 
         let mut bars = Vec::new();
@@ -125,16 +128,13 @@ impl UioDevice {
     ///
     /// # Arguments
     ///   * bar_nr: The index to the given resource (i.e., 1 for /sys/class/uio/uioX/device/resource1)
-    pub fn map_resource(&self, bar_nr: usize) -> Result<*mut libc::c_void, UioError> {
+    pub fn map_resource(&self, bar_nr: usize) -> Result<*mut libc::c_void> {
         let filename = format!(
             "/sys/class/uio/uio{}/device/resource{}",
             self.uio_num, bar_nr
         );
-        let f = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(filename.to_string())?;
-        let metadata = fs::metadata(filename.clone())?;
+        let f = OpenOptions::new().read(true).write(true).open(&filename)?;
+        let metadata = fs::metadata(&filename)?;
         let length = NonZeroUsize::new(metadata.len() as usize).ok_or(UioError::Size)?;
 
         let res = unsafe {
@@ -153,7 +153,7 @@ impl UioDevice {
         }
     }
 
-    fn read_file(&self, path: String) -> Result<String, UioError> {
+    fn read_file(&self, path: String) -> Result<String> {
         let mut file = File::open(path)?;
         let mut buffer = String::new();
         file.read_to_string(&mut buffer)?;
@@ -161,10 +161,10 @@ impl UioDevice {
     }
 
     /// The amount of events.
-    pub fn get_event_count(&self) -> Result<u32, UioError> {
+    pub fn get_event_count(&self) -> Result<u32> {
         let filename = format!("/sys/class/uio/uio{}/event", self.uio_num);
         let buffer = self.read_file(filename)?;
-        match u32::from_str_radix(&buffer, 10) {
+        match buffer.parse() {
             Ok(v) => Ok(v),
             Err(e) => Err(UioError::from(e)),
         }
@@ -181,13 +181,13 @@ impl UioDevice {
     }
 
     /// The name of the UIO device.
-    pub fn get_name(&self) -> Result<String, UioError> {
+    pub fn get_name(&self) -> Result<String> {
         let filename = format!("/sys/class/uio/uio{}/name", self.uio_num);
         self.read_file(filename)
     }
 
     /// The version of the UIO driver.
-    pub fn get_version(&self) -> Result<String, UioError> {
+    pub fn get_version(&self) -> Result<String> {
         let filename = format!("/sys/class/uio/uio{}/version", self.uio_num);
         self.read_file(filename)
     }
@@ -196,7 +196,7 @@ impl UioDevice {
     ///
     /// # Arguments
     ///  * mapping: The given index of the mapping (i.e., 1 for /sys/class/uio/uioX/maps/map1)
-    pub fn map_size(&self, mapping: usize) -> Result<usize, UioError> {
+    pub fn map_size(&self, mapping: usize) -> Result<usize> {
         let filename = format!(
             "/sys/class/uio/uio{}/maps/map{}/size",
             self.uio_num, mapping
@@ -212,7 +212,7 @@ impl UioDevice {
     ///
     /// # Arguments
     ///  * mapping: The given index of the mapping (i.e., 1 for /sys/class/uio/uioX/maps/map1)
-    pub fn map_addr(&self, mapping: usize) -> Result<usize, UioError> {
+    pub fn map_addr(&self, mapping: usize) -> Result<usize> {
         let filename = format!(
             "/sys/class/uio/uio{}/maps/map{}/addr",
             self.uio_num, mapping
@@ -228,7 +228,7 @@ impl UioDevice {
     ///
     /// # Arguments
     ///  * mapping: The given index of the mapping (i.e., 1 for /sys/class/uio/uioX/maps/map1)
-    pub fn map_name(&self, mapping: usize) -> Result<String, UioError> {
+    pub fn map_name(&self, mapping: usize) -> Result<String> {
         let filename = format!(
             "/sys/class/uio/uio{}/maps/map{}/name",
             self.uio_num, mapping
@@ -238,7 +238,7 @@ impl UioDevice {
 
     /// Return a list of all possible memory mappings.
     #[deprecated(since = "0.3.0", note = "Use get_mapping_info() instead")]
-    pub fn get_map_info(&mut self) -> Result<Vec<String>, UioError> {
+    pub fn get_map_info(&mut self) -> Result<Vec<String>> {
         let paths = fs::read_dir(format!("/sys/class/uio/uio{}/maps/", self.uio_num))?;
 
         let mut map = Vec::new();
@@ -262,7 +262,7 @@ impl UioDevice {
     /// This reads all files under `/sys/class/uio/uioN/maps/*`, where N ==
     /// `self.uio_num`. If any of the files are missing or otherwise unreadable,
     /// that Mapping will be skipped.
-    pub fn get_mapping_info(&mut self) -> Result<Vec<MappingInfo>, UioError> {
+    pub fn get_mapping_info(&mut self) -> Result<Vec<MappingInfo>> {
         let paths = fs::read_dir(format!("/sys/class/uio/uio{}/maps/", self.uio_num))?;
 
         let mut map = Vec::new();
@@ -299,7 +299,7 @@ impl UioDevice {
     ///
     /// # Arguments
     ///  * mapping: The given index of the mapping (i.e., 1 for /sys/class/uio/uioX/maps/map1)
-    pub fn map_mapping(&self, mapping: usize) -> Result<*mut libc::c_void, UioError> {
+    pub fn map_mapping(&self, mapping: usize) -> Result<*mut libc::c_void> {
         let offset = mapping * PAGESIZE;
         let map_size = self.map_size(mapping)?;
         let map_size = NonZeroUsize::new(map_size).ok_or(UioError::Size)?;
@@ -323,21 +323,21 @@ impl UioDevice {
     /// Enable interrupt
     pub fn irq_enable(&mut self) -> io::Result<()> {
         let bytes = 1u32.to_ne_bytes();
-        self.devfile.write(&bytes)?;
+        self.devfile.write_all(&bytes)?;
         Ok(())
     }
 
     /// Disable interrupt
     pub fn irq_disable(&mut self) -> io::Result<()> {
         let bytes = 0u32.to_ne_bytes();
-        self.devfile.write(&bytes)?;
+        self.devfile.write_all(&bytes)?;
         Ok(())
     }
 
     /// Wait for interrupt
     pub fn irq_wait(&mut self) -> io::Result<u32> {
-        let mut bytes: [u8; 4] = [0, 0, 0, 0];
-        self.devfile.read(&mut bytes)?;
+        let mut bytes = [0; 4];
+        self.devfile.read_exact(&mut bytes)?;
         Ok(u32::from_ne_bytes(bytes))
     }
 }
