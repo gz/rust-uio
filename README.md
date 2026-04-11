@@ -15,14 +15,14 @@ $ lspci -v -d :0x1d02 | grep "Kernel driver in use"
 ```
 
 Afterwards you should have one or more uio devices available in `/dev/uio*` which you can use to instantiate the
-UioDevice struct:
+`UioDevice` struct:
 
 ```rust
 use uio::UioDevice;
 
-pub fn main() {
+fn main() {
     let uio_num = 1; // /dev/uio1
-    let dev = UioDevice::new(uio_num).unwrap();
+    let dev = UioDevice::try_new(uio_num).unwrap();
     let mmap = dev.map_resource(5).unwrap();
 }
 ```
