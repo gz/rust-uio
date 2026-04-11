@@ -12,5 +12,5 @@ edition = "2021"
 
 [dependencies]
 fs2 = "0.4.3"
-nix = { version = "0.30.1", features = ["mman"] }
+nix = { version = "0.30", features = ["mman"] }
 libc = "0.2"
