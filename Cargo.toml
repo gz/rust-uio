@@ -8,6 +8,7 @@ documentation = "https://docs.rs/uio/"
 readme = "README.md"
 keywords = ["driver", "pci", "linux", "generic", "hardware"]
 license = "MIT"
+edition = "2021"
 
 [dependencies]
 fs2 = "0.4.3"

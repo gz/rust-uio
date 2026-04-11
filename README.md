@@ -18,13 +18,12 @@ Afterwards you should have one or more uio devices available in `/dev/uio*` whic
 UioDevice struct:
 
 ```rust
-extern crate uio;
-use uio::*;
+use uio::UioDevice;
 
 pub fn main() {
     let uio_num = 1; // /dev/uio1
     let dev = UioDevice::new(uio_num).unwrap();
-    let bar = dev.map_resource(5).unwrap();
+    let mmap = dev.map_resource(5).unwrap();
 }
 ```
 
