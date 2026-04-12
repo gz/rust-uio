@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [master]
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install Nix
+        uses: cachix/install-nix-action@8aa03977d8d733052d78f4e008a241fd1dbf36b3 # v31.10.6
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            accept-flake-config = true
+
+      - name: Nix fmt
+        run: nix fmt -- --ci
+      - name: Cargo fmt
+        run: nix develop -c -- cargo fmt --check
+      - name: Cargo Clippy
+        run: nix develop -c -- cargo clippy --all-features -- -D warnings
