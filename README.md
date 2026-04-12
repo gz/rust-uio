@@ -27,6 +27,18 @@ pub fn main() {
 }
 ```
 
+For async projects, the `async-tokio` feature can be enabled, which allows async waiting for an IRQ:
+
+```rust
+async fn main() {
+    let uio_num = 1; // /dev/uio1
+    let dev = UioDevice::try_new(uio_num).unwrap();
+    let mut async_uio: AsyncFd<UioDevice> = dev.try_into().unwrap();
+    async_uio.get_mut().irq_enable().unwrap();
+    async_uio.irq_wait().await.unwrap(); // Call irq_wait() directly on AsyncFd<UioDevice>
+}
+```
+
 ## Resources
 
 For more information about UIO check the following links:

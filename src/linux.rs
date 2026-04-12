@@ -6,6 +6,8 @@ use std::io;
 use std::io::prelude::*;
 use std::num::{NonZeroUsize, ParseIntError};
 use std::os::fd::{self, AsRawFd};
+#[cfg(feature = "async-tokio")]
+use tokio::io::unix::AsyncFd;
 
 const PAGESIZE: usize = 4096;
 
@@ -351,6 +353,16 @@ impl UioDevice {
             libc::fcntl(raw_fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
         }
     }
+
+    /// Wrap this object into an `AsyncFd<_>`.
+    ///
+    /// The wrapped object implements `AsyncIrqWait`.
+    /// This function calls `set_nonblock()` before wrapping `self`.
+    #[cfg(feature = "async-tokio")]
+    pub fn into_async_fd(self) -> io::Result<AsyncFd<Self>> {
+        self.set_nonblock();
+        AsyncFd::new(self)
+    }
 }
 
 impl fd::AsRawFd for UioDevice {
@@ -362,6 +374,42 @@ impl fd::AsRawFd for UioDevice {
 impl fd::AsFd for UioDevice {
     fn as_fd(&self) -> fd::BorrowedFd<'_> {
         self.devfile.as_fd()
+    }
+}
+
+#[cfg(feature = "async-tokio")]
+impl TryFrom<UioDevice> for AsyncFd<UioDevice> {
+    type Error = io::Error;
+
+    fn try_from(value: UioDevice) -> std::result::Result<Self, Self::Error> {
+        value.into_async_fd()
+    }
+}
+
+#[cfg(feature = "async-tokio")]
+#[async_trait::async_trait]
+pub trait AsyncIrqWait {
+    /// Wait for an interrupt.
+    ///
+    /// It is not uncommon to re-enable interrupts after returning from this function.
+    async fn irq_wait(&mut self) -> io::Result<u32>;
+}
+
+#[cfg(feature = "async-tokio")]
+#[async_trait::async_trait]
+impl AsyncIrqWait for AsyncFd<UioDevice> {
+    async fn irq_wait(&mut self) -> io::Result<u32> {
+        loop {
+            // Block until the file descriptor is readable
+            let mut fd = self.readable_mut().await?;
+            // Try some blocking I/O (which should not block because the descriptor is readable)
+            match fd.try_io(|inner| inner.get_mut().irq_wait()) {
+                // Return result
+                Ok(r) => return r,
+                // Spurious wakeup
+                Err(_) => continue,
+            }
+        }
     }
 }
 
