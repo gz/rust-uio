@@ -39,6 +39,18 @@ async fn main() {
 }
 ```
 
+## Development
+
+This repository contains a [Nix flake](/flake.nix) with a default development shell that can be used for Rust development.
+Some information to [setup Nix](https://nixos.org/download/) can be found [here](https://gitlab.com/lriesebos/nix-sandbox).
+
+To build this project:
+
+```sh
+nix develop
+cargo build
+```
+
 ## Resources
 
 For more information about UIO check the following links:
