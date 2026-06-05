@@ -46,6 +46,7 @@
                 rustToolchain
                 pkgs.nixd
                 pkgs.nil
+                pkgs.toml-cli
               ];
             };
           };
