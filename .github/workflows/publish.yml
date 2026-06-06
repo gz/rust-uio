@@ -27,12 +27,11 @@ jobs:
 
       - name: Verify tag version matches Cargo.toml version
         run: |
-          TAG_VERSION="${{ steps.get_tag.outputs.tag }}"
-          CLEAN_TAG_VERSION="${TAG_VERSION#v}"
-          CARGO_VERSION=$(nix develop -c -- toml get Cargo.toml package.version)
-          echo "Tag version: $CLEAN_TAG_VERSION"
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          CARGO_VERSION=$(nix develop -c -- toml get -r Cargo.toml package.version)
+          echo "Tag version: $TAG_VERSION"
           echo "Cargo.toml version: $CARGO_VERSION"
-          if [ "$CLEAN_TAG_VERSION" != "$CARGO_VERSION" ]; then
+          if [ "$TAG_VERSION" != "$CARGO_VERSION" ]; then
             echo "Tag version does not match Cargo.toml version"
             exit 1
           fi
